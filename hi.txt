@@ -1,1 +1,398 @@
 
+
+CREATE DATABASE iassess;
+
+USE iassess;
+-- Client Masters
+
+
+CREATE TABLE mstrcust(
+    c_id INT PRIMARY KEY AUTO_INCREMENT,
+    c_orgname VARCHAR(50),
+    c_desc VARCHAR(250),
+    c_size INT
+);
+
+CREATE TABLE mstrusr(
+    u_id INT PRIMARY KEY AUTO_INCREMENT,
+    u_name VARCHAR(50),
+    u_title VARCHAR(50),
+    u_cn01 VARCHAR(10),
+    u_cn02 VARCHAR(10),
+    u_email VARCHAR(15)
+);
+
+CREATE TABLE mstrweight(
+   -- CHECK  FOR ENUM
+    w_id INT PRIMARY KEY,
+    w_desc VARCHAR(250) NOT NULL
+
+);
+
+CREATE TABLE mstrlp(
+    tlp_id INT PRIMARY KEY,
+    tlp_desc VARCHAR(500) NOT NULL,
+    tlp_fontcolor VARCHAR(10) NOT NULL,
+    tlp_bgcolor VARCHAR(10) NOT NULL,
+    tlp_bordercolor VARCHAR(10) NOT NULL
+
+);
+
+CREATE TABLE mstrprj(
+    prj_code VARCHAR(10) PRIMARY KEY,
+    c_id INT,
+    prj_title VARCHAR(20),
+    prj_desc VARCHAR(250),
+    prj_startDate DATE,
+    prj_endDate DATE,
+    prj_dtlp INT,
+    prj_dtweightage INT,
+    FOREIGN KEY (c_id) REFERENCES mstrcust(c_id),
+    FOREIGN KEY (prj_dtlp) REFERENCES mstrlp(tlp_id),
+    FOREIGN KEY (prj_dtweightage) REFERENCES mstrweight(w_id)
+
+    -- No table
+
+    -- prj_spoc01 INT FOREIGN KEY REFERENCES mstrspc(spc_id),
+    -- prj_spoc02 INT FOREIGN KEY REFERENCES mstrspc(spc_id),
+    -- prj_spoc03 INT FOREIGN KEY REFERENCES mstrspc(spc_id),
+);
+
+CREATE TABLE mstrind(
+    ind_id INT PRIMARY KEY,
+    ind_name VARCHAR(15) UNIQUE NOT NULL
+);
+CREATE TABLE mstrgeo(
+    geo_id INT PRIMARY KEY,
+    geo_region VARCHAR(15) UNIQUE NOT NULL,
+    geo_country VARCHAR(15) UNIQUE NOT NULL
+
+);
+CREATE TABLE mstrmodule(
+    m_id INT PRIMARY KEY AUTO_INCREMENT,
+    m_name VARCHAR(50) NOT NULL,
+    m_desc VARCHAR(250) NOT NULL
+
+);
+
+
+CREATE TABLE tbl_custindmapping(
+    c_id INT,
+    ind_id INT,
+    FOREIGN KEY (c_id) REFERENCES mstrcust(c_id),
+    FOREIGN KEY (ind_id) REFERENCES mstrind(ind_id)
+    
+);
+
+CREATE TABLE tbl_custgeomapping(
+    c_id INT,
+    geo_id INT,
+    FOREIGN KEY (c_id) REFERENCES mstrcust(c_id),
+    FOREIGN KEY (geo_id) REFERENCES mstrgeo(geo_id)
+);
+
+CREATE TABLE tbl_custmodulemapping(
+    c_id INT,
+    m_id INT,
+    FOREIGN KEY (c_id) REFERENCES mstrcust(c_id),
+    FOREIGN KEY (m_id) REFERENCES mstrmodule(m_id)
+);
+
+CREATE TABLE tbl_prjusrmapping(
+    prj_code INT,
+    FOREIGN KEY (prj_code) REFERENCES mstrcust(c_id)
+);
+
+-- Question master
+
+
+CREATE TABLE mstrsection(
+    s_id INT PRIMARY KEY AUTO_INCREMENT,
+    s_vid INT NOT NULL,
+    s_vdate DATETIME  DEFAULT NOW(),
+    s_islatestversion BOOLEAN,
+    s_no VARCHAR(5) NOT NULL,
+    s_name VARCHAR(50) NOT NULL,
+    s_desc VARCHAR(250) NOT NULL
+  
+
+);
+
+
+CREATE TABLE mstrcontrols(
+    c_id INT PRIMARY KEY AUTO_INCREMENT,
+    c_vid INT,
+    c_vdate DATETIME NOT NULL DEFAULT NOW(),
+    c_islatestversion BOOLEAN,
+    c_crlno VARCHAR(5) NOT NULL,
+    c_title VARCHAR(50) NOT NULL,
+    c_subtitle VARCHAR(50),
+    c_desc VARCHAR(250) NOT NULL
+
+
+
+);
+
+CREATE TABLE mstrques(
+    q_id INT PRIMARY KEY AUTO_INCREMENT, 
+    q_vid INT ,
+    q_number VARCHAR(5),
+    q_vdate DATETIME NOT NULL DEFAULT NOW(),
+    q_islatestversion BOOLEAN,
+    q_ques VARCHAR(500) NOT NULL,
+    q_weightage INT
+   
+);
+
+CREATE TABLE modulesectionmap(
+    m_id INT NOT NULL,
+    s_id INT NOT NULL,
+    FOREIGN KEY(m_id) REFERENCES mstrmodule(m_id),
+    FOREIGN KEY(s_id) REFERENCES mstrsection(S_id)
+);
+
+CREATE TABLE sectioncontrolmap(
+    s_id INT NOT NULL,
+    c_id INT NOT NULL,
+    FOREIGN KEY(s_id) REFERENCES mstrsection(s_id),
+    FOREIGN KEY(c_id) REFERENCES mstrcontrols(c_id)
+);
+CREATE TABLE controlquesmap(
+    c_id INT NOT NULL,
+    q_id INT NOT NULL,
+    FOREIGN KEY(c_id) REFERENCES mstrcontrols(c_id),
+    FOREIGN KEY(q_id) REFERENCES mstrques(q_id)
+);
+
+
+CREATE TABLE mstresprating(
+    rat_id INT PRIMARY KEY,
+    rat_desc VARCHAR(250) NOT NULL
+
+);
+
+CREATE TABLE tblresp(
+    resp_id INT PRIMARY KEY,
+    resp_dt DATETIME,
+    resp_desc VARCHAR(50) NOT NULL,
+    resp_ev VARCHAR(50),
+    q_id INT,
+    -- q_vid INT,
+    resp_tlp  INT,
+    resp_rating INT,
+    resp_score INT,
+    FOREIGN KEY (q_id) REFERENCES mstrques(q_id),
+    -- FOREIGN KEY (q_vid) REFERENCES mstrques(q_vid),
+    FOREIGN KEY (resp_rating) REFERENCES mstresprating(rat_id)
+
+);
+
+CREATE TABLE tbliarespfiles(
+    f_id INT PRIMARY KEY,
+    resp_id INT,
+    FOREIGN KEY (resp_id) REFERENCES tblresp(resp_id)
+
+);
+
+
+DELIMITER //
+
+CREATE PROCEDURE createproc(
+    IN inputdata JSON 
+)
+BEGIN
+SET @type = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.type'));
+IF(@type = "question") THEN
+
+    BEGIN
+    SET @latest = (SELECT coalesce(MAX(q_number),0)+1 FROM mstrques);
+    SET @q_ques = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.ques'));
+    SET @q_weightage = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.weightage'));
+    INSERT INTO mstrques(
+        q_vid,
+        q_number,
+        q_islatestversion,
+        q_ques,
+        q_weightage
+    )
+    VALUES(1,@latest,1,@q_ques,@q_weightage);
+    SELECT  "success";
+    END;
+END IF;
+IF(@type = "control") THEN
+    BEGIN
+        SET @c_crlno = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.controlnumber'));
+        SET @c_title = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.title'));
+        SET @c_subtitle = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.subtitle'));
+        SET @c_desc = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.desc'));
+            IF NOT EXISTS(SELECT c_crlno FROM mstrcontrols WHERE c_crlno = @c_crlno) THEN
+                    INSERT INTO mstrcontrols(
+                        c_vid,
+                        c_islatestversion,
+                        c_crlno,
+                        c_title,
+                        c_subtitle,
+                        c_desc
+                    )
+                    SELECT 1,1,@c_crlno,@c_title,@c_subtitle,@c_desc;
+                    SELECT  "success";
+            ELSE
+                SELECT "Control number already present";
+            END IF;
+
+    END;
+END IF;
+IF(@type = "section") THEN
+    BEGIN
+    SET @s_no = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.sectionnumber'));
+    SET @s_name = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.name'));
+    SET @s_desc = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.desc'));
+
+    IF NOT EXISTS(SELECT s_no FROM mstrsection WHERE s_no = @s_no) THEN
+            INSERT INTO mstrsection(
+                s_vid,
+                s_islatestversion,
+                s_no,
+                s_name,
+                s_desc
+            )
+            SELECT 1,1,@s_no,@s_name,@s_desc;
+            SELECT "success";
+    ELSE
+        SELECT  "Section number already present";
+    END IF;
+
+    END;
+END IF;
+IF(@type = "module") THEN
+    BEGIN
+        SET @m_name = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.name'));
+        SET @m_desc = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.description'));
+        INSERT INTO mstrmodule(
+            m_name,
+            m_desc
+        )
+        SELECT @m_name,@m_desc;
+        SELECT "success";
+    END;
+END IF;
+IF(@type = "customer") THEN
+    BEGIN
+        SET @c_name = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.name'));
+        SET @c_desc = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.description'));
+        SET @c_size = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.size'));
+
+        INSERT INTO mstrcust(
+            c_orgname,
+            c_desc,
+            c_size
+        )
+        SELECT @c_name,@c_desc,@c_size;
+        SELECT "success";
+    END;
+END IF;
+
+IF(@type = "user") THEN
+    BEGIN
+        SET @m_name = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.name'));
+        SET @m_desc = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.description'));
+        INSERT INTO mstrmodule(
+            m_name,
+            m_desc
+        )
+        SELECT @m_name,@m_desc;
+        SELECT "success";
+    END;
+END IF;
+IF(@type = "industry") THEN
+    BEGIN
+        SET @u_name = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.name'));
+        SET @u_title = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.title'));
+        SET @u_cn01 = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.cn01'));
+        SET @u_cn02 = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.cn02'));
+        SET @u_email = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.email'));
+
+
+        INSERT INTO mstrusr(
+            u_name,
+            u_title,
+            u_cn01,
+            u_cn02,
+            u_email
+        )
+        SELECT @u_name,@u_title,@u_cn01,@u_cn02,@u_email;
+        SELECT "success";
+    END;
+END IF;
+
+
+END//
+
+
+CREATE  PROCEDURE link(
+ IN inputdata JSON 
+)
+BEGIN
+
+SET @m_id = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.moduleid'));
+SET @s_no = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.sectionnumber'));
+SET @s_vid = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.sectionversion'));
+SET @c_crlno = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.controlnumber'));
+SET @c_vid = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.controlversion'));
+SET @q_number = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.questionnumber'));
+SET @q_vid = JSON_UNQUOTE(JSON_EXTRACT(inputdata, '$.questionversion'));
+
+
+
+IF (@m_id IS NOT NULL) AND (@s_no IS NOT NULL) THEN
+
+    SET @s_id = (SELECT s_id FROM mstrsection WHERE s_no = @s_no AND s_vid = @s_vid);
+    IF NOT EXISTS(SELECT * FROM modulesectionmap WHERE m_id=@m_id AND s_id=@s_id) THEN
+		BEGIN
+			INSERT INTO modulesectionmap(
+			m_id ,
+			s_id 
+			)  
+			SELECT @m_id,@s_id ;
+		END;
+   END IF;
+END IF;
+
+IF (@s_no IS NOT NULL) AND (@c_crlno IS NOT NULL) THEN
+
+    SET @s_id = (SELECT s_id FROM mstrsection WHERE s_no = @s_no AND s_vid = @s_vid);
+    SET @c_id = (SELECT c_id FROM mstrcontrols WHERE c_crlno = @c_crlno AND c_vid = @c_vid);
+	IF NOT EXISTS(SELECT * FROM sectioncontrolmap WHERE s_id=@s_id AND c_id=@c_id) THEN
+		BEGIN
+			INSERT INTO sectioncontrolmap(
+			s_id ,
+			c_id 
+			)
+			SELECT @s_id,@c_id;
+		END;
+	END IF;
+END IF;
+
+IF (@c_crlno IS NOT NULL) AND (@q_number IS NOT NULL) THEN
+
+   
+    SET @c_id = (SELECT c_id FROM mstrcontrols WHERE c_crlno = @c_crlno AND c_vid = @c_vid);
+    SET @q_id = (SELECT q_id FROM mstrques WHERE q_number = @q_number AND q_vid =@q_vid);
+	IF NOT EXISTS(SELECT * FROM controlquesmap WHERE c_id=@c_id AND q_id=@q_id) THEN
+		BEGIN
+			INSERT INTO controlquesmap(
+			c_id ,
+			q_id 
+			)
+			SELECT @c_id,@q_id;
+		END;
+	END IF;
+    
+END IF;
+
+SELECT "success";
+        
+END//
+
+
+    
